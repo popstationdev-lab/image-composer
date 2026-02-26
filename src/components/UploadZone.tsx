@@ -10,6 +10,7 @@ interface UploadedFile {
   width?: number;
   height?: number;
   error?: string;
+  warning?: string;
 }
 
 interface UploadZoneProps {
@@ -59,14 +60,14 @@ export function UploadZone({ label, required, description, value, onChange, clas
     const error = validateFile(file);
     const preview = error ? "" : URL.createObjectURL(file);
     const id = crypto.randomUUID();
-    
+
     if (!error) {
       const { width, height } = await getImageDimensions(file);
       const shortSide = Math.min(width, height);
-      const dimensionError = shortSide > 0 && shortSide < 1600
+      const dimensionWarning = shortSide > 0 && shortSide < 1600
         ? `Shortest side is ${shortSide}px — recommended ≥1600px for best quality.`
         : undefined;
-      onChange({ id, file, preview, width, height, error: dimensionError });
+      onChange({ id, file, preview, width, height, warning: dimensionWarning });
     } else {
       onChange({ id, file, preview: "", error });
     }
@@ -102,8 +103,12 @@ export function UploadZone({ label, required, description, value, onChange, clas
             transition={{ duration: 0.2 }}
             className={cn(
               "relative rounded-xl overflow-hidden border border-border group",
-              compact ? "h-32" : "h-48"
+              !compact && "min-h-[12rem] max-h-[24rem]",
+              compact && "min-h-[8rem] max-h-[16rem]"
             )}
+            style={{
+              aspectRatio: value.width && value.height ? `${value.width} / ${value.height}` : undefined
+            }}
           >
             <img
               src={value.preview}
@@ -136,10 +141,16 @@ export function UploadZone({ label, required, description, value, onChange, clas
                 <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
               </div>
             </div>
-            {value.error && (
-              <div className="absolute top-2 left-2 bg-gold/20 border border-gold/40 rounded-lg px-2 py-1 flex items-center gap-1.5">
+            {value.warning && (
+              <div className="absolute top-2 left-2 bg-gold/20 border border-gold/40 rounded-lg px-2 py-1 flex items-center gap-1.5 backdrop-blur-sm">
                 <AlertCircle className="w-3 h-3 text-gold" />
-                <span className="text-xs text-gold">{value.error}</span>
+                <span className="text-xs text-gold font-medium">{value.warning}</span>
+              </div>
+            )}
+            {value.error && (
+              <div className="absolute top-2 left-2 bg-destructive/20 border border-destructive/40 rounded-lg px-2 py-1 flex items-center gap-1.5 backdrop-blur-sm">
+                <AlertCircle className="w-3 h-3 text-destructive" />
+                <span className="text-xs text-destructive font-medium">{value.error}</span>
               </div>
             )}
           </motion.div>

@@ -21,6 +21,7 @@ interface HistoryPanelProps {
   onClear: () => void;
   open: boolean;
   onClose: () => void;
+  loading?: boolean;
 }
 
 function daysUntil(dateStr: string): number {
@@ -39,7 +40,7 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(diff / 86400000)}d ago`;
 }
 
-export function HistoryPanel({ items, onOpen, onUpdate, onDelete, onClear, open, onClose }: HistoryPanelProps) {
+export function HistoryPanel({ items, onOpen, onUpdate, onDelete, onClear, open, onClose, loading }: HistoryPanelProps) {
   const [confirmClear, setConfirmClear] = useState(false);
 
   return (
@@ -116,7 +117,12 @@ export function HistoryPanel({ items, onOpen, onUpdate, onDelete, onClear, open,
 
             {/* Items */}
             <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-              {items.length === 0 ? (
+              {loading ? (
+                <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
+                  <div className="w-8 h-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  <p className="text-xs text-muted-foreground">Loading history…</p>
+                </div>
+              ) : items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full gap-3 text-center">
                   <div className="w-12 h-12 rounded-xl bg-surface-2 border border-border flex items-center justify-center">
                     <Clock className="w-5 h-5 text-muted-foreground" />

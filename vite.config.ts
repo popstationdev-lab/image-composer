@@ -11,6 +11,24 @@ export default defineConfig(({ mode }) => ({
     hmr: {
       overlay: false,
     },
+    proxy: {
+      "/api": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/webhooks": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/health": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+      "/metrics": {
+        target: "http://localhost:3001",
+        changeOrigin: true,
+      },
+    },
   },
   plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
   resolve: {

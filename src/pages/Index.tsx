@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles, History, Upload, Wand2, ChevronRight, AlertTriangle, Plus, X } from "lucide-react";
+import { Sparkles, History, Upload, Wand2, ChevronRight, ChevronLeft, AlertTriangle, Plus, X } from "lucide-react";
 import { UploadZone, UploadedFile } from "@/components/UploadZone";
 import { PromptBuilder, PromptParams, assemblePrompt } from "@/components/PromptBuilder";
 import { ProcessingView, GenerationStatus } from "@/components/ProcessingView";
@@ -8,12 +8,19 @@ import { ResultViewer, GenerationResult } from "@/components/ResultViewer";
 import { HistoryPanel, HistoryItem } from "@/components/HistoryPanel";
 import { UpdateModal } from "@/components/UpdateModal";
 import { cn } from "@/lib/utils";
-
-// Demo placeholder images (public domain fashion photos from picsum)
-const DEMO_RESULTS = [
-  "https://images.unsplash.com/photo-1595341595379-cf1cd0ed7ad1?w=800&q=80",
-  "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800&q=80",
-];
+import {
+  uploadAssets,
+  generate,
+  getGeneration,
+  updateGeneration,
+  deleteGeneration,
+  getHistory,
+  getDownloadUrl,
+  getSessionId,
+  type GenerationRecord,
+  type HistoryItem as ApiHistoryItem,
+} from "@/lib/api";
+import { toast } from "sonner";
 
 type AppStep = "upload" | "prompt" | "processing" | "result";
 
@@ -49,8 +56,8 @@ function StepIndicator({ step }: { step: AppStep }) {
             i === currentIdx
               ? "bg-primary/15 text-primary border border-primary/30"
               : i < currentIdx
-              ? "text-muted-foreground"
-              : "text-muted-foreground/40"
+                ? "text-muted-foreground"
+                : "text-muted-foreground/40"
           )}>
             <span className={cn(
               "w-4 h-4 rounded-full flex items-center justify-center text-xs",
@@ -69,118 +76,330 @@ function StepIndicator({ step }: { step: AppStep }) {
   );
 }
 
+/** Convert API GenerationRecord to the shape ResultViewer expects */
+function toGenerationResult(gen: GenerationRecord): GenerationResult {
+  return {
+    id: gen.id,
+    outputs: gen.outputs.map((o) => ({
+      id: o.id,
+      url: o.url ?? "",
+      thumbnailUrl: o.url ?? undefined,
+      width: o.width ?? undefined,
+      height: o.height ?? undefined,
+    })),
+    prompt: gen.prompt,
+    params: gen.params as Record<string, unknown>,
+    createdAt: gen.createdAt,
+    nanoBananaResponseId: (gen.kieTaskIds ?? []).join(", "),
+  };
+}
+
+/** Convert API HistoryItem to the local HistoryPanel shape */
+function toHistoryItem(item: ApiHistoryItem, result?: GenerationResult): HistoryItem {
+  return {
+    id: item.id,
+    thumbnailUrl: item.thumbnailUrl ?? "",
+    shortPrompt: item.shortPrompt,
+    createdAt: item.createdAt,
+    expiresAt: item.expiresAt,
+    result,
+  };
+}
+
+const POLL_INTERVAL_MS = 3000;
+
 export default function Index() {
   const [step, setStep] = useState<AppStep>("upload");
+
+  // Upload state
   const [modelImage, setModelImage] = useState<UploadedFile | null>(null);
   const [garmentImage, setGarmentImage] = useState<UploadedFile | null>(null);
   const [fabricImage, setFabricImage] = useState<UploadedFile | null>(null);
   const [styleRefs, setStyleRefs] = useState<UploadedFile[]>([]);
+
+  // Uploaded asset IDs from the backend
+  const [assetIds, setAssetIds] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+
+  // Prompt/generation state
   const [params, setParams] = useState<PromptParams>(defaultParams);
   const [genStatus, setGenStatus] = useState<GenerationStatus>("queued");
   const [elapsed, setElapsed] = useState(0);
+  const [currentGenerationId, setCurrentGenerationId] = useState<string | null>(null);
   const [result, setResult] = useState<GenerationResult | null>(null);
+
+  // History
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  // Update modal
   const [updateTarget, setUpdateTarget] = useState<GenerationResult | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
-  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Persist form state
+  // Refs for polling and timer
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cancelledRef = useRef(false);
+
+  // ─── Persist params ───────────────────────────────────────────────────────
   useEffect(() => {
     const saved = localStorage.getItem("composit-params");
-    if (saved) {
-      try { setParams(JSON.parse(saved)); } catch {}
-    }
-    const savedHistory = localStorage.getItem("composit-history");
-    if (savedHistory) {
-      try { setHistory(JSON.parse(savedHistory)); } catch {}
-    }
+    if (saved) { try { setParams(JSON.parse(saved)); } catch { /* ignore */ } }
   }, []);
 
   useEffect(() => {
     localStorage.setItem("composit-params", JSON.stringify(params));
   }, [params]);
 
+  // ─── Ensure session exists on mount ───────────────────────────────────────
+  useEffect(() => { getSessionId(); }, []);
+
+  // ─── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
-    localStorage.setItem("composit-history", JSON.stringify(history));
-  }, [history]);
+    return () => {
+      if (elapsedRef.current) clearInterval(elapsedRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
 
   const canProceedToPrompt = modelImage && !modelImage.error && garmentImage && !garmentImage.error;
 
-  const handleGenerate = () => {
+  // ─── Step 1→2: Upload assets to backend ───────────────────────────────────
+  const handleContinueToPrompt = async () => {
+    if (!modelImage?.file || !garmentImage?.file) return;
+    setUploading(true);
+
+    try {
+      const res = await uploadAssets({
+        modelImage: modelImage.file,
+        garmentImage: garmentImage.file,
+        fabricImage: fabricImage?.file ?? null,
+        styleRefs: styleRefs.map((s) => s.file),
+      });
+      setAssetIds(res.assets.map((a) => a.id));
+
+      // Show any dimension warnings
+      const warned = res.assets.filter((a) => a.warning);
+      if (warned.length > 0) {
+        toast.warning(warned.map((a) => `${a.role}: ${a.warning}`).join("\n"));
+      }
+
+      setStep("prompt");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ─── Step 2→3: Submit generation ─────────────────────────────────────────
+  const handleGenerate = useCallback(async (overrideParams?: PromptParams, overrideAssetIds?: string[]) => {
+    const activeParams = overrideParams ?? params;
+    const activeAssets = overrideAssetIds ?? assetIds;
+    const prompt = activeParams.customPrompt || assemblePrompt(activeParams);
+
     setStep("processing");
     setGenStatus("queued");
     setElapsed(0);
+    cancelledRef.current = false;
 
-    setTimeout(() => setGenStatus("processing"), 1200);
+    // Start elapsed timer
+    elapsedRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
 
-    elapsedRef.current = setInterval(() => {
-      setElapsed((e) => e + 1);
-    }, 1000);
+    try {
+      const { generationId } = await generate({
+        assetIds: activeAssets,
+        prompt,
+        params: activeParams,
+      });
 
-    // Simulate generation completing after ~5s
-    setTimeout(() => {
-      if (elapsedRef.current) clearInterval(elapsedRef.current);
-      const newResult: GenerationResult = {
-        id: crypto.randomUUID(),
-        outputs: Array.from({ length: params.variations }, (_, i) => ({
-          id: crypto.randomUUID(),
-          url: DEMO_RESULTS[i % DEMO_RESULTS.length],
-          thumbnailUrl: DEMO_RESULTS[i % DEMO_RESULTS.length],
-          width: 3840,
-          height: 5760,
-        })),
-        prompt: params.customPrompt || assemblePrompt(params),
-        params: params as unknown as Record<string, unknown>,
-        createdAt: new Date().toISOString(),
-        modelImageUrl: modelImage?.preview,
-        nanoBananaResponseId: `nb_${Math.random().toString(36).slice(2, 10)}`,
-      };
-      setResult(newResult);
-      setGenStatus("done");
-      setStep("result");
+      setCurrentGenerationId(generationId);
+      setGenStatus("processing");
 
-      // Add to history
-      const historyItem: HistoryItem = {
-        id: newResult.id,
-        thumbnailUrl: newResult.outputs[0].url,
-        shortPrompt: newResult.prompt.slice(0, 120),
-        createdAt: newResult.createdAt,
-        expiresAt: new Date(Date.now() + 24 * 24 * 60 * 60 * 1000).toISOString(),
-        result: newResult,
-      };
-      setHistory((h) => [historyItem, ...h]);
-    }, 5000);
-  };
+      // ─── Poll every 3s until terminal state ───────────────────────────────
+      pollRef.current = setInterval(async () => {
+        if (cancelledRef.current) return;
 
+        try {
+          const gen = await getGeneration(generationId);
+
+          if (gen.status === "processing") {
+            setGenStatus("processing");
+          }
+
+          if (gen.status === "completed" || gen.status === "failed") {
+            clearInterval(pollRef.current!);
+            clearInterval(elapsedRef.current!);
+
+            if (gen.status === "failed") {
+              setGenStatus("done"); // ProcessingView doesn't have an "error" state
+              toast.error(`Generation failed: ${gen.failureReason ?? "Unknown error"}`);
+              setStep("prompt");
+              return;
+            }
+
+            const genResult = toGenerationResult(gen);
+            setResult(genResult);
+            setGenStatus("done");
+            setStep("result");
+
+            // Add to history
+            const historyItem = toHistoryItem(
+              {
+                id: gen.id,
+                status: gen.status,
+                prompt: gen.prompt,
+                shortPrompt: gen.prompt.slice(0, 120),
+                params: gen.params,
+                parentGenerationId: gen.parentGenerationId,
+                createdAt: gen.createdAt,
+                completedAt: gen.completedAt,
+                expiresAt: new Date(
+                  new Date(gen.createdAt).getTime() + 24 * 24 * 60 * 60 * 1000
+                ).toISOString(),
+                thumbnailUrl: gen.outputs[0]?.url ?? null,
+                outputCount: gen.outputs.length,
+              },
+              genResult
+            );
+            setHistory((h) => [historyItem, ...h.filter((i) => i.id !== gen.id)]);
+          }
+        } catch {
+          // Non-fatal — polling errors are transient
+        }
+      }, POLL_INTERVAL_MS);
+    } catch (err) {
+      clearInterval(elapsedRef.current!);
+      toast.error(err instanceof Error ? err.message : "Generation failed to start");
+      setStep("prompt");
+    }
+  }, [params, assetIds]);
+
+  // ─── Cancel processing ────────────────────────────────────────────────────
   const handleCancel = () => {
+    cancelledRef.current = true;
     if (elapsedRef.current) clearInterval(elapsedRef.current);
+    if (pollRef.current) clearInterval(pollRef.current);
     setStep("prompt");
     setGenStatus("queued");
   };
 
+  // ─── Update (re-generate with new params) ────────────────────────────────
   const handleUpdate = (res: GenerationResult) => {
     setUpdateTarget(res);
     setUpdateModalOpen(true);
   };
 
-  const handleUpdateSubmit = (newParams: PromptParams) => {
+  const handleUpdateSubmit = async (newParams: PromptParams) => {
     setParams(newParams);
     setUpdateModalOpen(false);
     setUpdateTarget(null);
-    handleGenerate();
-  };
 
-  const handleHistoryOpen = (item: HistoryItem) => {
-    if (item.result) {
-      setResult(item.result);
-      setStep("result");
-      setHistoryOpen(false);
+    if (!updateTarget) return;
+
+    // Re-use same assets; create a child generation
+    try {
+      const prompt = newParams.customPrompt || assemblePrompt(newParams);
+      const { generationId } = await updateGeneration(updateTarget.id, {
+        prompt,
+        params: newParams,
+        assetIds,
+      });
+
+      setCurrentGenerationId(generationId);
+      setStep("processing");
+      setGenStatus("queued");
+      setElapsed(0);
+      cancelledRef.current = false;
+
+      elapsedRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+      setGenStatus("processing");
+
+      pollRef.current = setInterval(async () => {
+        if (cancelledRef.current) return;
+        try {
+          const gen = await getGeneration(generationId);
+          if (gen.status === "completed") {
+            clearInterval(pollRef.current!);
+            clearInterval(elapsedRef.current!);
+            const genResult = toGenerationResult(gen);
+            setResult(genResult);
+            setGenStatus("done");
+            setStep("result");
+          } else if (gen.status === "failed") {
+            clearInterval(pollRef.current!);
+            clearInterval(elapsedRef.current!);
+            toast.error(`Update failed: ${gen.failureReason ?? "Unknown error"}`);
+            setStep("result");
+          }
+        } catch { /* transient */ }
+      }, POLL_INTERVAL_MS);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Update failed");
     }
   };
 
-  const handleDeleteHistory = (id: string) => {
+  // ─── Download via blob (forces download) ────────────────────────────────
+  const handleDownloadOutput = async (outputId: string, fallbackUrl?: string): Promise<string> => {
+    try {
+      const { url } = await getDownloadUrl(outputId);
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch (err) {
+      console.error("Download failed:", err);
+      return fallbackUrl ?? "";
+    }
+  };
+
+  // ─── History Interactivity ────────────────────────────────────────────────
+  // ─── History ──────────────────────────────────────────────────────────────
+  const handleOpenHistory = async () => {
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    try {
+      const page = await getHistory(30);
+      const items = page.items.map((item) => toHistoryItem(item));
+      setHistory(items);
+    } catch (err) {
+      toast.error("Failed to load history");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleHistoryOpen = async (item: HistoryItem) => {
+    setHistoryLoading(true);
+    try {
+      const fullGen = await getGeneration(item.id);
+
+      // Populate results
+      const genResult = toGenerationResult(fullGen);
+      setResult(genResult);
+
+      // Populate form details
+      setParams(fullGen.params as unknown as PromptParams);
+
+      // Populate asset IDs (so update works correctly)
+      setAssetIds(fullGen.assets.map(a => a.id));
+
+      // We don't have the original UploadedFile objects (previews/files), 
+      // but we can at least set the IDs so the backend "update" works.
+      // For a perfect UX, we'd need to fetch the assets to show previews.
+
+      setStep("result");
+      setHistoryOpen(false);
+    } catch (err) {
+      toast.error("Failed to load details");
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
+  const handleDeleteHistory = async (id: string) => {
     setHistory((h) => h.filter((item) => item.id !== id));
+    try { await deleteGeneration(id); } catch { /* soft-fail */ }
   };
 
   const addStyleRef = (file: UploadedFile | null) => {
@@ -189,12 +408,27 @@ export default function Index() {
     }
   };
 
+  const handleNewComposition = () => {
+    setStep("upload");
+    setModelImage(null);
+    setGarmentImage(null);
+    setFabricImage(null);
+    setStyleRefs([]);
+    setAssetIds([]);
+    setResult(null);
+    setParams(defaultParams);
+    setCurrentGenerationId(null);
+  };
+
+  const handleBackToPrompt = () => {
+    setStep("prompt");
+  };
+
   return (
     <div className="min-h-screen gradient-hero flex flex-col">
       {/* Header */}
       <header className="glass border-b border-border sticky top-0 z-30">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-4">
-          {/* Logo */}
           <div className="flex items-center gap-2.5 flex-shrink-0">
             <div className="w-7 h-7 rounded-lg bg-gradient-cyan flex items-center justify-center">
               <Sparkles className="w-4 h-4 text-primary-foreground" />
@@ -205,13 +439,11 @@ export default function Index() {
             </span>
           </div>
 
-          {/* Step indicator */}
           <StepIndicator step={step} />
 
-          {/* Actions */}
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={() => setHistoryOpen(true)}
+              onClick={handleOpenHistory}
               className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-surface-2 border border-border text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
               <History className="w-3.5 h-3.5" />
@@ -240,13 +472,8 @@ export default function Index() {
               transition={{ duration: 0.35 }}
               className="flex flex-col gap-8"
             >
-              {/* Hero headline */}
               <div className="text-center py-8">
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.1 }}
-                >
+                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
                   <h1 className="text-4xl sm:text-5xl font-bold text-gradient-cyan mb-3 tracking-tight leading-tight">
                     Product-on-Model<br />Imagery
                   </h1>
@@ -256,7 +483,6 @@ export default function Index() {
                 </motion.div>
               </div>
 
-              {/* Upload card */}
               <motion.div
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -269,7 +495,6 @@ export default function Index() {
                   <span className="ml-auto text-xs text-muted-foreground">JPG · PNG · HEIC · max 25MB</span>
                 </div>
 
-                {/* Required uploads */}
                 <div className="grid sm:grid-cols-2 gap-4 mb-4">
                   <UploadZone
                     label="Model Image"
@@ -287,7 +512,6 @@ export default function Index() {
                   />
                 </div>
 
-                {/* Optional uploads */}
                 <details className="group">
                   <summary className="cursor-pointer list-none flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3 select-none">
                     <Plus className="w-3.5 h-3.5 group-open:rotate-45 transition-transform" />
@@ -307,13 +531,7 @@ export default function Index() {
                         <span className="text-xs text-muted-foreground ml-1.5">({styleRefs.length}/3)</span>
                       </span>
                       {styleRefs.length < 3 && (
-                        <UploadZone
-                          label=""
-                          description="Mood or style inspiration"
-                          value={null}
-                          onChange={addStyleRef}
-                          compact
-                        />
+                        <UploadZone label="" description="Mood or style inspiration" value={null} onChange={addStyleRef} compact />
                       )}
                       {styleRefs.length > 0 && (
                         <div className="flex gap-2 flex-wrap">
@@ -334,26 +552,24 @@ export default function Index() {
                   </div>
                 </details>
 
-                {/* Usage notice */}
                 <p className="text-xs text-muted-foreground mt-5 pb-1 border-t border-border pt-4">
                   By uploading you confirm you have rights to edit and use these images.
                 </p>
               </motion.div>
 
-              {/* CTA */}
               <div className="flex justify-end">
                 <button
-                  onClick={() => setStep("prompt")}
-                  disabled={!canProceedToPrompt}
+                  onClick={handleContinueToPrompt}
+                  disabled={!canProceedToPrompt || uploading}
                   className={cn(
                     "flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold transition-all",
-                    canProceedToPrompt
+                    canProceedToPrompt && !uploading
                       ? "bg-primary text-primary-foreground hover:opacity-90 shadow-cyan hover:shadow-cyan-lg"
                       : "bg-surface-2 border border-border text-muted-foreground cursor-not-allowed"
                   )}
                 >
-                  Continue to Prompt
-                  <ChevronRight className="w-4 h-4" />
+                  {uploading ? "Uploading…" : "Continue to Prompt"}
+                  {!uploading && <ChevronRight className="w-4 h-4" />}
                 </button>
               </div>
             </motion.div>
@@ -369,7 +585,6 @@ export default function Index() {
               transition={{ duration: 0.35 }}
             >
               <div className="grid lg:grid-cols-3 gap-6">
-                {/* Left: asset thumbnails */}
                 <div className="lg:col-span-1 flex flex-col gap-4">
                   <div className="rounded-2xl bg-surface-1 border border-border shadow-card p-4 flex flex-col gap-3">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Assets</h3>
@@ -399,7 +614,6 @@ export default function Index() {
                     </button>
                   </div>
 
-                  {/* Estimated time */}
                   <div className="rounded-xl bg-surface-1 border border-border p-4">
                     <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Estimated Output</h3>
                     <div className="flex flex-col gap-1.5 text-xs text-muted-foreground">
@@ -425,7 +639,6 @@ export default function Index() {
                   </div>
                 </div>
 
-                {/* Right: prompt builder */}
                 <div className="lg:col-span-2 flex flex-col gap-4">
                   <div className="rounded-2xl bg-surface-1 border border-border shadow-card p-6">
                     <div className="flex items-center gap-2 mb-5">
@@ -435,14 +648,13 @@ export default function Index() {
                     <PromptBuilder params={params} onChange={setParams} />
                   </div>
 
-                  {/* Generate button */}
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <AlertTriangle className="w-3.5 h-3.5 text-gold" />
                       Outputs will expire after 24 days
                     </div>
                     <button
-                      onClick={handleGenerate}
+                      onClick={() => handleGenerate()}
                       className="flex items-center gap-2 px-7 py-3.5 rounded-xl text-sm font-semibold bg-primary text-primary-foreground hover:opacity-90 shadow-cyan hover:shadow-cyan-lg transition-all"
                     >
                       <Sparkles className="w-4 h-4" />
@@ -485,28 +697,30 @@ export default function Index() {
             >
               <div className="flex items-center justify-between">
                 <h2 className="text-lg font-semibold text-foreground">Result</h2>
-                <button
-                  onClick={() => {
-                    setStep("upload");
-                    setModelImage(null);
-                    setGarmentImage(null);
-                    setFabricImage(null);
-                    setStyleRefs([]);
-                    setResult(null);
-                    setParams(defaultParams);
-                  }}
-                  className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
-                >
-                  <Plus className="w-3.5 h-3.5 rotate-45" />
-                  New composition
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleBackToPrompt}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    Back to prompt
+                  </button>
+                  <div className="w-px h-3 bg-border" />
+                  <button
+                    onClick={handleNewComposition}
+                    className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5"
+                  >
+                    <Plus className="w-3.5 h-3.5 rotate-45" />
+                    New composition
+                  </button>
+                </div>
               </div>
 
               <div className="rounded-2xl bg-surface-1 border border-border shadow-card p-6">
                 <ResultViewer
                   result={result}
                   onUpdate={handleUpdate}
-                  onSaveToHistory={() => {}}
+                  onDownloadOutput={handleDownloadOutput}
                 />
               </div>
             </motion.div>
@@ -523,6 +737,7 @@ export default function Index() {
         onClear={() => setHistory([])}
         open={historyOpen}
         onClose={() => setHistoryOpen(false)}
+        loading={historyLoading}
       />
 
       {/* Update modal */}

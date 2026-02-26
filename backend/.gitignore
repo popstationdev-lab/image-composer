@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.test
+
+# Build / Output
+dist/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS / Editor
+.DS_Store
+.vscode/
+
+# Prisma
+# Often generated client is in node_modules, but migrations should be kept.
+# If you have local sqlite for dev:
+# *.db
+# *.db-journal

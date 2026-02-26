@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Download, RefreshCw, ZoomIn, ChevronLeft, ChevronRight, SplitSquareHorizontal, Clock, Info } from "lucide-react";
+import { Download, RefreshCw, ZoomIn, ChevronLeft, ChevronRight, SplitSquareHorizontal, Clock, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface GenerationOutput {
@@ -24,7 +24,7 @@ export interface GenerationResult {
 interface ResultViewerProps {
   result: GenerationResult;
   onUpdate: (result: GenerationResult) => void;
-  onSaveToHistory?: (result: GenerationResult) => void;
+  onDownloadOutput?: (outputId: string, fallbackUrl?: string) => Promise<string>;
 }
 
 function BeforeAfterSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUrl: string }) {
@@ -78,18 +78,27 @@ function BeforeAfterSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUr
   );
 }
 
-export function ResultViewer({ result, onUpdate, onSaveToHistory }: ResultViewerProps) {
+export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewerProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showCompare, setShowCompare] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const selected = result.outputs[selectedIndex];
 
   const handleDownload = async () => {
-    const a = document.createElement("a");
-    a.href = selected.url;
-    a.download = `composit-${result.id}-${selectedIndex + 1}.jpg`;
-    a.click();
+    setDownloading(true);
+    try {
+      const url = onDownloadOutput
+        ? await onDownloadOutput(selected.id, selected.url)
+        : selected.url;
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `composit-${result.id}-${selectedIndex + 1}.jpg`;
+      a.click();
+    } finally {
+      setDownloading(false);
+    }
   };
 
   return (
@@ -203,10 +212,18 @@ export function ResultViewer({ result, onUpdate, onSaveToHistory }: ResultViewer
       <div className="flex gap-3">
         <button
           onClick={handleDownload}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+          disabled={downloading}
+          className={cn(
+            "flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium transition-all",
+            downloading ? "opacity-75 cursor-wait" : "hover:opacity-90"
+          )}
         >
-          <Download className="w-4 h-4" />
-          Download
+          {downloading ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Download className="w-4 h-4" />
+          )}
+          {downloading ? "Downloading..." : "Download"}
         </button>
         <button
           onClick={() => onUpdate(result)}
@@ -215,14 +232,6 @@ export function ResultViewer({ result, onUpdate, onSaveToHistory }: ResultViewer
           <RefreshCw className="w-4 h-4" />
           Update
         </button>
-        {onSaveToHistory && (
-          <button
-            onClick={() => onSaveToHistory(result)}
-            className="ml-auto flex items-center gap-2 px-4 py-2.5 rounded-lg bg-surface-2 border border-border text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Save to History
-          </button>
-        )}
       </div>
     </motion.div>
   );

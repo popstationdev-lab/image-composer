@@ -59,7 +59,7 @@ app.use(
         // Don't log health/metrics polls
         autoLogging: {
             ignore: (req) =>
-                req.url?.startsWith("/health") || req.url?.startsWith("/metrics"),
+                !!(req.url?.startsWith("/health") || req.url?.startsWith("/metrics")),
         },
     })
 );

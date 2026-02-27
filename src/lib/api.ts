@@ -3,7 +3,7 @@
  * Session ID is sent via X-Session-Id header and reflected as a cookie.
  */
 
-const API_BASE = "/api"; // proxied to http://localhost:3001 in dev via vite.config.ts
+const API_BASE = (import.meta.env.VITE_API_BASE_URL as string) || "/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

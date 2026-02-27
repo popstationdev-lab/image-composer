@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma } from "../lib/prisma";
 import { register, queueDepthGauge } from "../lib/metrics";
-import { getBoss, GENERATION_QUEUE } from "../lib/queue";
+import { getGenerationQueue, GENERATION_QUEUE } from "../lib/queue";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -18,13 +18,14 @@ router.get("/health", async (_req: Request, res: Response) => {
         checks.db = "error";
     }
 
-    // Queue check (pg-boss is backed by DB, so same check)
+    // Queue check (BullMQ)
     try {
-        const boss = await getBoss();
-        const waiting = await boss.getQueueSize(GENERATION_QUEUE);
-        queueDepthGauge.set(waiting);
+        const queue = getGenerationQueue();
+        const counts = await queue.getJobCounts("waiting", "delayed");
+        const depth = counts.waiting + counts.delayed;
+        queueDepthGauge.set(depth);
         checks.queue = "ok";
-        checks.queueDepth = String(waiting);
+        checks.queueDepth = String(depth);
     } catch {
         checks.queue = "error";
     }

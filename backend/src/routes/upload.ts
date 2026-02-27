@@ -135,11 +135,6 @@ router.post(
                     data: { storageKey },
                 });
 
-                const shortSideWarning =
-                    width && height && Math.min(width, height) < 1600
-                        ? `Shortest side ${Math.min(width, height)}px — recommend ≥1600px`
-                        : undefined;
-
                 createdAssets.push({
                     id: asset.id,
                     role,
@@ -147,7 +142,6 @@ router.post(
                     width,
                     height,
                     storageKey,
-                    warning: shortSideWarning,
                 });
 
                 logger.info({ assetId: asset.id, role, storageKey }, "Asset uploaded");

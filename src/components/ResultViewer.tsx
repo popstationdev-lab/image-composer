@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Download, RefreshCw, ZoomIn, ChevronLeft, ChevronRight, SplitSquareHorizontal, Clock, Info, Loader2 } from "lucide-react";
+import { Download, RefreshCw, Eye, ChevronLeft, ChevronRight, SplitSquareHorizontal, Clock, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImageModal } from "./ImageModal";
 
 export interface GenerationOutput {
   id: string;
@@ -83,6 +84,7 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
   const [showCompare, setShowCompare] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
 
   const selected = result.outputs[selectedIndex];
 
@@ -120,20 +122,19 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
             transition={{ duration: 0.3 }}
             src={selected.url}
             alt="Generated output"
-            className="w-full object-contain max-h-[520px]"
+            className="w-full object-contain max-h-[520px] cursor-pointer"
+            onClick={() => setShowModal(true)}
           />
         )}
 
         {/* Overlay actions */}
         <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <a
-            href={selected.url}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => setShowModal(true)}
             className="w-8 h-8 rounded-lg bg-background/80 border border-border flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ZoomIn className="w-4 h-4" />
-          </a>
+            <Eye className="w-4 h-4" />
+          </button>
           <button
             onClick={() => setShowInfo(!showInfo)}
             className={cn(
@@ -160,6 +161,15 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
           )}
         </div>
       </div>
+
+      {showModal && (
+        <ImageModal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          imageUrl={selected.url}
+          title={`Generation Result - Variation ${selectedIndex + 1}`}
+        />
+      )}
 
       {/* Thumbnails for variations */}
       {result.outputs.length > 1 && (

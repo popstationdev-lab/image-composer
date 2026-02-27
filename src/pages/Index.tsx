@@ -179,12 +179,6 @@ export default function Index() {
       });
       setAssetIds(res.assets.map((a) => a.id));
 
-      // Show any dimension warnings
-      const warned = res.assets.filter((a) => a.warning);
-      if (warned.length > 0) {
-        toast.warning(warned.map((a) => `${a.role}: ${a.warning}`).join("\n"));
-      }
-
       setStep("prompt");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
@@ -512,12 +506,13 @@ export default function Index() {
                   />
                 </div>
 
-                <details className="group">
-                  <summary className="cursor-pointer list-none flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3 select-none">
-                    <Plus className="w-3.5 h-3.5 group-open:rotate-45 transition-transform" />
-                    Optional references
-                    <span className="text-xs text-muted-foreground/60">(fabric detail, style refs)</span>
-                  </summary>
+                <div className="mt-8 pt-6 border-t border-border">
+                  <div className="flex items-center gap-2 mb-5">
+                    <Plus className="w-3.5 h-3.5 text-muted-foreground/60" />
+                    <h3 className="text-sm font-semibold text-foreground">Optional References</h3>
+                    <span className="text-xs text-muted-foreground/60">(Fabric detail & Style refs)</span>
+                  </div>
+
                   <div className="grid sm:grid-cols-2 gap-4">
                     <UploadZone
                       label="Fabric Detail"
@@ -550,7 +545,7 @@ export default function Index() {
                       )}
                     </div>
                   </div>
-                </details>
+                </div>
 
                 <p className="text-xs text-muted-foreground mt-5 pb-1 border-t border-border pt-4">
                   By uploading you confirm you have rights to edit and use these images.

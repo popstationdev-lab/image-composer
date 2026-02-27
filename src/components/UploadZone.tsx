@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, X, ImageIcon, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Upload, X, ImageIcon, AlertCircle, CheckCircle2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImageModal } from "./ImageModal";
 
 interface UploadedFile {
   id: string;
@@ -54,6 +55,7 @@ function getImageDimensions(file: File): Promise<{ width: number; height: number
 
 export function UploadZone({ label, required, description, value, onChange, className, compact }: UploadZoneProps) {
   const [dragging, setDragging] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const processFile = useCallback(async (file: File) => {
@@ -63,11 +65,7 @@ export function UploadZone({ label, required, description, value, onChange, clas
 
     if (!error) {
       const { width, height } = await getImageDimensions(file);
-      const shortSide = Math.min(width, height);
-      const dimensionWarning = shortSide > 0 && shortSide < 1600
-        ? `Shortest side is ${shortSide}px — recommended ≥1600px for best quality.`
-        : undefined;
-      onChange({ id, file, preview, width, height, warning: dimensionWarning });
+      onChange({ id, file, preview, width, height });
     } else {
       onChange({ id, file, preview: "", error });
     }
@@ -113,9 +111,17 @@ export function UploadZone({ label, required, description, value, onChange, clas
             <img
               src={value.preview}
               alt={label}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-cover cursor-pointer"
+              onClick={() => setShowModal(true)}
             />
             <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+              <button
+                onClick={() => setShowModal(true)}
+                className="w-8 h-8 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition-colors"
+                title="View Full Size"
+              >
+                <Eye className="w-4 h-4" />
+              </button>
               <button
                 onClick={() => inputRef.current?.click()}
                 className="text-xs text-foreground bg-secondary border border-border px-3 py-1.5 rounded-lg hover:bg-surface-3 transition-colors"
@@ -141,17 +147,14 @@ export function UploadZone({ label, required, description, value, onChange, clas
                 <CheckCircle2 className="w-3.5 h-3.5 text-primary" />
               </div>
             </div>
-            {value.warning && (
-              <div className="absolute top-2 left-2 bg-gold/20 border border-gold/40 rounded-lg px-2 py-1 flex items-center gap-1.5 backdrop-blur-sm">
-                <AlertCircle className="w-3 h-3 text-gold" />
-                <span className="text-xs text-gold font-medium">{value.warning}</span>
-              </div>
-            )}
-            {value.error && (
-              <div className="absolute top-2 left-2 bg-destructive/20 border border-destructive/40 rounded-lg px-2 py-1 flex items-center gap-1.5 backdrop-blur-sm">
-                <AlertCircle className="w-3 h-3 text-destructive" />
-                <span className="text-xs text-destructive font-medium">{value.error}</span>
-              </div>
+
+            {showModal && (
+              <ImageModal
+                isOpen={showModal}
+                onClose={() => setShowModal(false)}
+                imageUrl={value.preview}
+                title={label}
+              />
             )}
           </motion.div>
         ) : (

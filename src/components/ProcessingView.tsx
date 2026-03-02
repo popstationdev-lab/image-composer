@@ -6,6 +6,7 @@ export type GenerationStatus = "queued" | "processing" | "done" | "error";
 
 interface ProcessingViewProps {
   status: GenerationStatus;
+  variations: number;
   estimatedSeconds?: number;
   elapsedSeconds?: number;
   onCancel?: () => void;
@@ -51,7 +52,7 @@ const stepIndex = (s: GenerationStatus) => {
   return steps.findIndex((x) => x.key === s);
 };
 
-export function ProcessingView({ status, estimatedSeconds, elapsedSeconds = 0, onCancel, error, onRetry }: ProcessingViewProps) {
+export function ProcessingView({ status, variations, estimatedSeconds, elapsedSeconds = 0, onCancel, error, onRetry }: ProcessingViewProps) {
   const cfg = statusConfig[status];
   const Icon = cfg.icon;
   const currentStep = stepIndex(status);
@@ -60,7 +61,7 @@ export function ProcessingView({ status, estimatedSeconds, elapsedSeconds = 0, o
     : status === "processing" && estimatedSeconds
       ? Math.min(95, (elapsedSeconds / estimatedSeconds) * 100)
       : status === "queued" ? 5
-      : 0;
+        : 0;
 
   return (
     <motion.div
@@ -81,8 +82,8 @@ export function ProcessingView({ status, estimatedSeconds, elapsedSeconds = 0, o
         <div className={cn(
           "w-20 h-20 rounded-full flex items-center justify-center border",
           status === "done" ? "bg-primary/10 border-primary/40" :
-          status === "error" ? "bg-destructive/10 border-destructive/40" :
-          "bg-surface-2 border-border"
+            status === "error" ? "bg-destructive/10 border-destructive/40" :
+              "bg-surface-2 border-border"
         )}>
           {status === "processing" ? (
             <Loader2 className="w-8 h-8 text-primary animate-spin" />
@@ -90,8 +91,8 @@ export function ProcessingView({ status, estimatedSeconds, elapsedSeconds = 0, o
             <Icon className={cn(
               "w-8 h-8",
               status === "done" ? "text-primary" :
-              status === "error" ? "text-destructive" :
-              "text-muted-foreground"
+                status === "error" ? "text-destructive" :
+                  "text-muted-foreground"
             )} />
           )}
         </div>
@@ -106,11 +107,6 @@ export function ProcessingView({ status, estimatedSeconds, elapsedSeconds = 0, o
         <p className="text-sm text-muted-foreground">
           {error || cfg.sublabel}
         </p>
-        {estimatedSeconds && status === "processing" && (
-          <p className="text-xs text-muted-foreground mt-1 font-mono">
-            ~{Math.max(0, estimatedSeconds - elapsedSeconds)}s remaining
-          </p>
-        )}
       </div>
 
       {/* Progress bar */}
@@ -146,8 +142,14 @@ export function ProcessingView({ status, estimatedSeconds, elapsedSeconds = 0, o
       {/* Skeleton placeholders */}
       {status === "processing" && (
         <div className="w-full max-w-sm grid grid-cols-3 gap-3">
-          {[1, 2, 3].slice(0, 1).map((i) => (
-            <div key={i} className="col-span-3 h-48 rounded-xl skeleton" />
+          {[...Array(variations)].map((_, i) => (
+            <div
+              key={i}
+              className={cn(
+                "h-48 rounded-xl skeleton",
+                variations === 1 ? "col-span-3" : "col-span-1"
+              )}
+            />
           ))}
         </div>
       )}

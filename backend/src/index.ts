@@ -39,10 +39,25 @@ app.use(
 );
 app.use(
     cors({
-        origin: process.env.FRONTEND_ORIGIN ?? "http://localhost:5173",
+        origin: (origin, callback) => {
+            const frontendOriginEnv = process.env.FRONTEND_ORIGIN ?? "http://localhost:5173,http://localhost:8080";
+            // Handle both comma-separated and potentially quoted values
+            const allowedOrigins = frontendOriginEnv
+                .split(",")
+                .map(o => o.trim().replace(/^["'](.*)["']$/, "$1"));
+
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                logger.warn({ origin }, "CORS blocked origin");
+                callback(null, false);
+            }
+        },
         credentials: true,
         methods: ["GET", "POST", "DELETE", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization", "X-Session-Id", "X-Admin-Secret"],
+        allowedHeaders: ["X-Session-Id", "X-Admin-Secret", "Content-Type", "Authorization"],
+        exposedHeaders: ["X-Session-Id"],
+        optionsSuccessStatus: 200,
     })
 );
 

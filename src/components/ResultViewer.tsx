@@ -20,6 +20,13 @@ export interface GenerationResult {
   createdAt: string;
   modelImageUrl?: string;
   nanoBananaResponseId?: string;
+  assets?: Array<{
+    id: string;
+    role: string;
+    url: string;
+    width?: number;
+    height?: number;
+  }>;
 }
 
 interface ResultViewerProps {
@@ -186,6 +193,27 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
               <img src={output.url} alt={`Variation ${i + 1}`} className="w-full h-full object-cover" />
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Source Assets section */}
+      {result.assets && result.assets.length > 0 && (
+        <div className="flex flex-col gap-2 mt-2">
+          <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Source Assets</span>
+          <div className="flex gap-2 flex-wrap">
+            {result.assets.map((asset) => (
+              <div
+                key={asset.id}
+                className="group relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface-2"
+                title={`${asset.role}: ${asset.id}`}
+              >
+                <img src={asset.url} alt={asset.role} className="w-full h-full object-cover" />
+                <div className="absolute inset-0 bg-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                  <span className="text-[10px] font-bold text-white uppercase px-1 rounded bg-black/50">{asset.role}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

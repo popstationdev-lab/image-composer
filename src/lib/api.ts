@@ -66,6 +66,7 @@ export interface GenerationRecord {
         id: string;
         role: string;
         filename: string;
+        url: string | null;
         width: number | null;
         height: number | null;
     }>;

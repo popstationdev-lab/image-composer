@@ -91,6 +91,13 @@ function toGenerationResult(gen: GenerationRecord): GenerationResult {
     params: gen.params as Record<string, unknown>,
     createdAt: gen.createdAt,
     nanoBananaResponseId: (gen.kieTaskIds ?? []).join(", "),
+    assets: gen.assets.map((a) => ({
+      id: a.id,
+      role: a.role,
+      url: a.url ?? "",
+      width: a.width ?? undefined,
+      height: a.height ?? undefined,
+    })),
   };
 }
 
@@ -155,12 +162,103 @@ export default function Index() {
   // ─── Ensure session exists on mount ───────────────────────────────────────
   useEffect(() => { getSessionId(); }, []);
 
+  // ─── Restore state on mount ───────────────────────────────────────────────
+  useEffect(() => {
+    const savedGenId = localStorage.getItem("composit-pending-gen-id");
+    if (savedGenId) {
+      void (async () => {
+        try {
+          const gen = await getGeneration(savedGenId);
+          if (gen.status === "processing" || gen.status === "queued") {
+            setCurrentGenerationId(savedGenId);
+            setStep("processing");
+            setGenStatus(gen.status);
+            // Calculate elapsed from createdAt
+            const startTs = new Date(gen.createdAt).getTime();
+            const nowTs = Date.now();
+            setElapsed(Math.floor((nowTs - startTs) / 1000));
+            startPolling(savedGenId);
+          } else {
+            localStorage.removeItem("composit-pending-gen-id");
+          }
+        } catch {
+          localStorage.removeItem("composit-pending-gen-id");
+        }
+      })();
+    }
+  }, []);
+
   // ─── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (elapsedRef.current) clearInterval(elapsedRef.current);
       if (pollRef.current) clearInterval(pollRef.current);
     };
+  }, []);
+
+  // ─── Polling Logic ────────────────────────────────────────────────────────
+  const startPolling = useCallback((generationId: string) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    if (elapsedRef.current) clearInterval(elapsedRef.current);
+
+    cancelledRef.current = false;
+    elapsedRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
+
+    pollRef.current = setInterval(async () => {
+      if (cancelledRef.current) return;
+
+      try {
+        const gen = await getGeneration(generationId);
+
+        if (gen.status === "processing") {
+          setGenStatus("processing");
+        }
+
+        if (gen.status === "completed" || gen.status === "failed" || gen.status === "cancelled") {
+          clearInterval(pollRef.current!);
+          clearInterval(elapsedRef.current!);
+          localStorage.removeItem("composit-pending-gen-id");
+
+          if (gen.status === "failed") {
+            setGenStatus("done");
+            toast.error(`Generation failed: ${gen.failureReason ?? "Unknown error"}`);
+            setStep("prompt");
+            return;
+          }
+
+          if (gen.status === "cancelled") {
+            setStep("prompt");
+            return;
+          }
+
+          const genResult = toGenerationResult(gen);
+          setResult(genResult);
+          setGenStatus("done");
+          setStep("result");
+
+          // Update local history
+          const historyItem = toHistoryItem(
+            {
+              id: gen.id,
+              status: gen.status,
+              prompt: gen.prompt,
+              shortPrompt: gen.prompt.slice(0, 120),
+              params: gen.params,
+              parentGenerationId: gen.parentGenerationId,
+              createdAt: gen.createdAt,
+              completedAt: gen.completedAt,
+              expiresAt: new Date(new Date(gen.createdAt).getTime() + 24 * 24 * 60 * 60 * 1000).toISOString(),
+              thumbnailUrl: gen.outputs[0]?.url ?? null,
+              outputCount: gen.outputs.length,
+            },
+            genResult
+          );
+          setHistory((h) => [historyItem, ...h.filter((i) => i.id !== gen.id)]);
+        }
+      } catch (err) {
+        // Transient errors
+      }
+    }, POLL_INTERVAL_MS);
   }, []);
 
   const canProceedToPrompt = modelImage && !modelImage.error && garmentImage && !garmentImage.error;
@@ -196,10 +294,6 @@ export default function Index() {
     setStep("processing");
     setGenStatus("queued");
     setElapsed(0);
-    cancelledRef.current = false;
-
-    // Start elapsed timer
-    elapsedRef.current = setInterval(() => setElapsed((e) => e + 1), 1000);
 
     try {
       const { generationId } = await generate({
@@ -209,72 +303,21 @@ export default function Index() {
       });
 
       setCurrentGenerationId(generationId);
+      localStorage.setItem("composit-pending-gen-id", generationId);
       setGenStatus("processing");
-
-      // ─── Poll every 3s until terminal state ───────────────────────────────
-      pollRef.current = setInterval(async () => {
-        if (cancelledRef.current) return;
-
-        try {
-          const gen = await getGeneration(generationId);
-
-          if (gen.status === "processing") {
-            setGenStatus("processing");
-          }
-
-          if (gen.status === "completed" || gen.status === "failed") {
-            clearInterval(pollRef.current!);
-            clearInterval(elapsedRef.current!);
-
-            if (gen.status === "failed") {
-              setGenStatus("done"); // ProcessingView doesn't have an "error" state
-              toast.error(`Generation failed: ${gen.failureReason ?? "Unknown error"}`);
-              setStep("prompt");
-              return;
-            }
-
-            const genResult = toGenerationResult(gen);
-            setResult(genResult);
-            setGenStatus("done");
-            setStep("result");
-
-            // Add to history
-            const historyItem = toHistoryItem(
-              {
-                id: gen.id,
-                status: gen.status,
-                prompt: gen.prompt,
-                shortPrompt: gen.prompt.slice(0, 120),
-                params: gen.params,
-                parentGenerationId: gen.parentGenerationId,
-                createdAt: gen.createdAt,
-                completedAt: gen.completedAt,
-                expiresAt: new Date(
-                  new Date(gen.createdAt).getTime() + 24 * 24 * 60 * 60 * 1000
-                ).toISOString(),
-                thumbnailUrl: gen.outputs[0]?.url ?? null,
-                outputCount: gen.outputs.length,
-              },
-              genResult
-            );
-            setHistory((h) => [historyItem, ...h.filter((i) => i.id !== gen.id)]);
-          }
-        } catch {
-          // Non-fatal — polling errors are transient
-        }
-      }, POLL_INTERVAL_MS);
+      startPolling(generationId);
     } catch (err) {
-      clearInterval(elapsedRef.current!);
       toast.error(err instanceof Error ? err.message : "Generation failed to start");
       setStep("prompt");
     }
-  }, [params, assetIds]);
+  }, [params, assetIds, startPolling]);
 
   // ─── Cancel processing ────────────────────────────────────────────────────
   const handleCancel = () => {
     cancelledRef.current = true;
     if (elapsedRef.current) clearInterval(elapsedRef.current);
     if (pollRef.current) clearInterval(pollRef.current);
+    localStorage.removeItem("composit-pending-gen-id");
     setStep("prompt");
     setGenStatus("queued");
   };
@@ -317,6 +360,7 @@ export default function Index() {
           if (gen.status === "completed") {
             clearInterval(pollRef.current!);
             clearInterval(elapsedRef.current!);
+            localStorage.removeItem("composit-pending-gen-id");
             const genResult = toGenerationResult(gen);
             setResult(genResult);
             setGenStatus("done");
@@ -324,6 +368,7 @@ export default function Index() {
           } else if (gen.status === "failed") {
             clearInterval(pollRef.current!);
             clearInterval(elapsedRef.current!);
+            localStorage.removeItem("composit-pending-gen-id");
             toast.error(`Update failed: ${gen.failureReason ?? "Unknown error"}`);
             setStep("result");
           }
@@ -368,21 +413,26 @@ export default function Index() {
     try {
       const fullGen = await getGeneration(item.id);
 
-      // Populate results
-      const genResult = toGenerationResult(fullGen);
-      setResult(genResult);
-
-      // Populate form details
+      // Populate details (even if not done, so update works and prompt is correct)
       setParams(fullGen.params as unknown as PromptParams);
-
-      // Populate asset IDs (so update works correctly)
       setAssetIds(fullGen.assets.map(a => a.id));
 
-      // We don't have the original UploadedFile objects (previews/files), 
-      // but we can at least set the IDs so the backend "update" works.
-      // For a perfect UX, we'd need to fetch the assets to show previews.
+      if (fullGen.status === "processing" || fullGen.status === "queued") {
+        setCurrentGenerationId(fullGen.id);
+        localStorage.setItem("composit-pending-gen-id", fullGen.id);
+        setStep("processing");
+        setGenStatus(fullGen.status);
+        // Calculate elapsed
+        const startTs = new Date(fullGen.createdAt).getTime();
+        const nowTs = Date.now();
+        setElapsed(Math.floor((nowTs - startTs) / 1000));
+        startPolling(fullGen.id);
+      } else {
+        const genResult = toGenerationResult(fullGen);
+        setResult(genResult);
+        setStep("result");
+      }
 
-      setStep("result");
       setHistoryOpen(false);
     } catch (err) {
       toast.error("Failed to load details");
@@ -673,6 +723,7 @@ export default function Index() {
             >
               <ProcessingView
                 status={genStatus}
+                variations={params.variations}
                 estimatedSeconds={params.quality === "fast" ? 90 : params.quality === "balanced" ? 180 : 360}
                 elapsedSeconds={elapsed}
                 onCancel={handleCancel}

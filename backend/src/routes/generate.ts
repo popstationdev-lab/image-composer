@@ -139,6 +139,17 @@ router.get(
 
         const outputsWithUrls = await withSignedUrls(gen.outputs);
 
+        const assetsWithUrls = await withSignedUrls(
+            gen.assets.map((ga: any) => ({
+                id: ga.asset.id,
+                role: ga.asset.role,
+                filename: ga.asset.filename,
+                width: ga.asset.width,
+                height: ga.asset.height,
+                storageKey: ga.asset.storageKey,
+            }))
+        );
+
         res.json({
             id: gen.id,
             status: gen.status,
@@ -153,13 +164,7 @@ router.get(
             startedAt: gen.startedAt,
             completedAt: gen.completedAt,
             outputs: outputsWithUrls,
-            assets: gen.assets.map((ga: { asset: { id: string; role: string | null; filename: string; width: number | null; height: number | null } }) => ({
-                id: ga.asset.id,
-                role: ga.asset.role,
-                filename: ga.asset.filename,
-                width: ga.asset.width,
-                height: ga.asset.height,
-            })),
+            assets: assetsWithUrls,
         });
     }
 );

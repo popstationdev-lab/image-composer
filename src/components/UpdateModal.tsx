@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw } from "lucide-react";
 import { PromptBuilder, PromptParams } from "./PromptBuilder";
+import { BlurredImage } from "./ui/BlurredImage";
 import type { GenerationResult } from "./ResultViewer";
 
 interface UpdateModalProps {
@@ -60,10 +61,11 @@ export function UpdateModal({ open, onClose, original, initialParams, onSubmit }
                 <div className="px-6 pt-4 pb-3 border-b border-border">
                   <span className="text-xs text-muted-foreground font-mono uppercase tracking-wider mb-2 block">Original Output</span>
                   <div className="flex gap-3 items-start">
-                    <img
+                    <BlurredImage
                       src={original.outputs[0]?.url}
                       alt="Original"
-                      className="w-20 h-20 rounded-lg object-cover border border-border flex-shrink-0"
+                      containerClassName="w-20 h-20 rounded-lg flex-shrink-0"
+                      className="object-cover"
                     />
                     <p className="text-xs font-mono text-foreground/60 leading-relaxed line-clamp-4">{original.prompt}</p>
                   </div>

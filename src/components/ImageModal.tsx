@@ -2,6 +2,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Download, ZoomIn, ZoomOut } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { BlurredImage } from "./ui/BlurredImage";
 
 interface ImageModalProps {
     isOpen: boolean;
@@ -24,44 +25,44 @@ export function ImageModal({ isOpen, onClose, imageUrl, title }: ImageModalProps
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     onClick={onClose}
-                    className="absolute inset-0 bg-background/90 backdrop-blur-md"
+                    className="absolute inset-0 bg-background/80 backdrop-blur-sm"
                 />
 
                 {/* Modal Content */}
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                    initial={{ opacity: 0, scale: 0.95, y: 20 }}
                     animate={{ opacity: 1, scale: 1, y: 0 }}
-                    exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                    exit={{ opacity: 0, scale: 0.95, y: 20 }}
                     transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                    className="relative w-full max-w-5xl h-full flex flex-col items-center justify-center pointer-events-none"
+                    className="relative w-full max-w-6xl h-full max-h-[90vh] bg-surface-1 rounded-2xl border border-border shadow-modal flex flex-col overflow-hidden pointer-events-auto"
                 >
                     {/* Header */}
-                    <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4 pointer-events-auto">
+                    <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface-2/50 backdrop-blur-sm z-10">
                         <div className="flex flex-col">
                             {title && <h3 className="text-sm font-semibold text-foreground">{title}</h3>}
                         </div>
                         <div className="flex items-center gap-2">
                             <button
                                 onClick={() => setZoom(!zoom)}
-                                className="w-10 h-10 rounded-full bg-surface-2/80 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition-colors backdrop-blur-sm"
+                                className="w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition-colors"
                                 title={zoom ? "Zoom Out" : "Zoom In"}
                             >
-                                {zoom ? <ZoomOut className="w-5 h-5" /> : <ZoomIn className="w-5 h-5" />}
+                                {zoom ? <ZoomOut className="w-4 h-4" /> : <ZoomIn className="w-4 h-4" />}
                             </button>
                             <a
                                 href={imageUrl}
                                 download
-                                className="w-10 h-10 rounded-full bg-surface-2/80 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition-colors backdrop-blur-sm"
+                                className="w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition-colors"
                                 title="Download"
                             >
-                                <Download className="w-5 h-5" />
+                                <Download className="w-4 h-4" />
                             </a>
                             <button
                                 onClick={onClose}
-                                className="w-10 h-10 rounded-full bg-surface-2/80 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition-colors backdrop-blur-sm"
+                                className="w-9 h-9 rounded-lg bg-surface-2 border border-border flex items-center justify-center text-foreground hover:bg-surface-3 transition-colors"
                                 title="Close"
                             >
-                                <X className="w-5 h-5" />
+                                <X className="w-4 h-4" />
                             </button>
                         </div>
                     </div>
@@ -69,18 +70,19 @@ export function ImageModal({ isOpen, onClose, imageUrl, title }: ImageModalProps
                     {/* Image Container */}
                     <div
                         className={cn(
-                            "w-full h-full flex items-center justify-center overflow-auto pointer-events-auto no-scrollbar",
+                            "flex-1 w-full flex items-center justify-center overflow-auto no-scrollbar p-6 bg-black/10",
                             zoom ? "cursor-zoom-out" : "cursor-zoom-in"
                         )}
                         onClick={() => setZoom(!zoom)}
                     >
-                        <img
+                        <BlurredImage
                             src={imageUrl}
                             alt={title || "Image Preview"}
-                            className={cn(
+                            containerClassName={cn(
                                 "transition-all duration-300 rounded-lg shadow-2xl",
-                                zoom ? "min-w-full object-contain" : "max-w-full max-h-full object-contain"
+                                zoom ? "min-w-full min-h-full" : "w-full h-full"
                             )}
+                            className="w-full h-full object-contain"
                         />
                     </div>
                 </motion.div>

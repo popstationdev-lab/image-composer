@@ -105,23 +105,26 @@ const SelectChips = <T extends string>({
 );
 
 export function PromptBuilder({ params, onChange }: PromptBuilderProps) {
-  const [showRaw, setShowRaw] = useState(false);
   const [rawPrompt, setRawPrompt] = useState("");
+  const [isDirty, setIsDirty] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const assembled = assemblePrompt(params);
 
   useEffect(() => {
-    if (!showRaw) setRawPrompt(assembled);
-  }, [assembled, showRaw]);
+    if (!isDirty) {
+      setRawPrompt(assembled);
+    }
+  }, [assembled, isDirty]);
 
   const handleRawChange = (val: string) => {
     setRawPrompt(val);
+    setIsDirty(true);
     onChange({ ...params, customPrompt: val });
   };
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(showRaw ? rawPrompt : assembled);
+    navigator.clipboard.writeText(rawPrompt);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -266,25 +269,20 @@ export function PromptBuilder({ params, onChange }: PromptBuilderProps) {
       <div className="rounded-xl border border-border overflow-hidden">
         <div className="flex items-center justify-between px-4 py-2.5 bg-surface-2 border-b border-border">
           <span className="text-xs font-medium text-muted-foreground font-mono uppercase tracking-wider">
-            {showRaw ? "Edit Prompt" : "Assembled Prompt"}
+            Prompt Editor
           </span>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setShowRaw(!showRaw)}
+              onClick={() => {
+                setRawPrompt(assembled);
+                setIsDirty(false);
+                onChange({ ...params, customPrompt: "" });
+              }}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              {showRaw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              {showRaw ? "Preview" : "Edit Raw"}
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset to Controls
             </button>
-            {showRaw && (
-              <button
-                onClick={() => { setRawPrompt(assembled); onChange({ ...params, customPrompt: "" }); }}
-                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                Reset
-              </button>
-            )}
             <button
               onClick={handleCopy}
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -295,23 +293,19 @@ export function PromptBuilder({ params, onChange }: PromptBuilderProps) {
           </div>
         </div>
         <div className="bg-surface-1 p-4">
-          {showRaw ? (
-            <textarea
-              value={rawPrompt}
-              onChange={(e) => handleRawChange(e.target.value)}
-              className="w-full h-40 bg-transparent text-sm font-mono text-foreground resize-none outline-none leading-relaxed"
-              placeholder="Edit your prompt here..."
-              maxLength={2000}
-            />
-          ) : (
-            <p className="text-sm font-mono text-foreground/80 leading-relaxed">{assembled}</p>
-          )}
+          <textarea
+            value={rawPrompt}
+            onChange={(e) => handleRawChange(e.target.value)}
+            className="w-full h-40 bg-transparent text-sm font-mono text-foreground resize-none outline-none leading-relaxed"
+            placeholder="Edit your prompt here..."
+            maxLength={2000}
+          />
         </div>
         <div className="px-4 py-2 bg-surface-2 border-t border-border flex items-center justify-between">
           <span className="text-xs text-muted-foreground font-mono">
-            {(showRaw ? rawPrompt : assembled).length} / 2000 chars
+            {rawPrompt.length} / 2000 chars
           </span>
-          {(showRaw ? rawPrompt : assembled).length > 1800 && (
+          {rawPrompt.length > 1800 && (
             <div className="flex items-center gap-1.5 text-gold text-xs">
               <AlertTriangle className="w-3 h-3" />
               Approaching limit

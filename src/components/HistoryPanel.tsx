@@ -2,6 +2,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, RefreshCw, Trash2, Download, Clock, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BlurredImage } from "./ui/BlurredImage";
 import type { GenerationResult } from "./ResultViewer";
 
 export interface HistoryItem {
@@ -146,10 +147,11 @@ export function HistoryPanel({ items, onOpen, onUpdate, onDelete, onClear, open,
                       className="w-16 h-16 rounded-lg overflow-hidden flex-shrink-0 cursor-pointer"
                       onClick={() => onOpen(item)}
                     >
-                      <img
+                      <BlurredImage
                         src={item.thumbnailUrl}
                         alt="Generation thumbnail"
-                        className="w-full h-full object-cover"
+                        containerClassName="w-full h-full"
+                        className="object-cover"
                       />
                     </div>
 

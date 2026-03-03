@@ -7,6 +7,7 @@ import { ProcessingView, GenerationStatus } from "@/components/ProcessingView";
 import { ResultViewer, GenerationResult } from "@/components/ResultViewer";
 import { HistoryPanel, HistoryItem } from "@/components/HistoryPanel";
 import { UpdateModal } from "@/components/UpdateModal";
+import { BlurredImage } from "@/components/ui/BlurredImage";
 import { cn } from "@/lib/utils";
 import {
   uploadAssets,
@@ -582,7 +583,7 @@ export default function Index() {
                         <div className="flex gap-2 flex-wrap">
                           {styleRefs.map((ref, i) => (
                             <div key={ref.id} className="relative w-14 h-14 rounded-lg overflow-hidden border border-border">
-                              <img src={ref.preview} alt="" className="w-full h-full object-cover" />
+                              <BlurredImage src={ref.preview} alt="" containerClassName="w-full h-full" className="object-cover" />
                               <button
                                 onClick={() => setStyleRefs((r) => r.filter((_, j) => j !== i))}
                                 className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-background/80 flex items-center justify-center"
@@ -636,19 +637,19 @@ export default function Index() {
                     {modelImage?.preview && (
                       <div>
                         <span className="text-xs text-muted-foreground mb-1 block">Model</span>
-                        <img src={modelImage.preview} alt="Model" className="w-full h-32 object-cover rounded-lg border border-border" />
+                        <BlurredImage src={modelImage.preview} alt="Model" containerClassName="w-full h-32" className="object-cover rounded-lg" />
                       </div>
                     )}
                     {garmentImage?.preview && (
                       <div>
                         <span className="text-xs text-muted-foreground mb-1 block">Garment</span>
-                        <img src={garmentImage.preview} alt="Garment" className="w-full h-32 object-cover rounded-lg border border-border" />
+                        <BlurredImage src={garmentImage.preview} alt="Garment" containerClassName="w-full h-32" className="object-cover rounded-lg" />
                       </div>
                     )}
                     {fabricImage?.preview && (
                       <div>
                         <span className="text-xs text-muted-foreground mb-1 block">Fabric</span>
-                        <img src={fabricImage.preview} alt="Fabric" className="w-full h-20 object-cover rounded-lg border border-border" />
+                        <BlurredImage src={fabricImage.preview} alt="Fabric" containerClassName="w-full h-20" className="object-cover rounded-lg" />
                       </div>
                     )}
                     <button

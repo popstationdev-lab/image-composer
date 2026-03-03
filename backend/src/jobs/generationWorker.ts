@@ -1,5 +1,6 @@
 import { Job } from "bullmq";
 import axios from "axios";
+import sharp from "sharp";
 import { prisma } from "../lib/prisma";
 import { getSignedUrl, uploadToStorage } from "../lib/supabase";
 import {
@@ -241,16 +242,28 @@ export async function handleKieCallback(
                 responseType: "arraybuffer",
                 timeout: 60_000,
             });
-            const buffer = Buffer.from(imageRes.data);
-            const mime = (imageRes.headers["content-type"] as string) || "image/png";
-            const ext = mime.includes("jpg") || mime.includes("jpeg") ? "jpg" : "png";
+            const originalBuffer = Buffer.from(imageRes.data);
+
+            // Convert to webp using sharp
+            const webpBuffer = await sharp(originalBuffer)
+                .webp({ quality: 90 })
+                .toBuffer();
+
+            const mime = "image/webp";
+            const ext = "webp";
             const outputId = `out_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
             const storageKey = `generations/${generationId}/outputs/${outputId}.${ext}`;
 
-            await uploadToStorage(storageKey, buffer, mime);
+            await uploadToStorage(storageKey, webpBuffer, mime);
 
             await prisma.generationOutput.create({
-                data: { generationId, kieTaskId: taskId, storageKey, mime, sizeBytes: buffer.length },
+                data: {
+                    generationId,
+                    kieTaskId: taskId,
+                    storageKey,
+                    mime,
+                    sizeBytes: webpBuffer.length
+                },
             });
 
             logger.info({ generationId, taskId, storageKey }, "Output stored");

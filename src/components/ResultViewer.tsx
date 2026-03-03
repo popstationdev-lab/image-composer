@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Download, RefreshCw, Eye, ChevronLeft, ChevronRight, SplitSquareHorizontal, Clock, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ImageModal } from "./ImageModal";
+import { BlurredImage } from "./ui/BlurredImage";
 
 export interface GenerationOutput {
   id: string;
@@ -58,10 +59,10 @@ function BeforeAfterSlider({ beforeUrl, afterUrl }: { beforeUrl: string; afterUr
       onTouchEnd={() => { dragging.current = false; }}
     >
       {/* After (bottom layer) */}
-      <img src={afterUrl} alt="After" className="absolute inset-0 w-full h-full object-cover" />
+      <BlurredImage src={afterUrl} alt="After" containerClassName="absolute inset-0 w-full h-full" className="object-cover" />
       {/* Before (clipped) */}
       <div className="absolute inset-0 overflow-hidden" style={{ width: `${split}%` }}>
-        <img src={beforeUrl} alt="Before" className="absolute inset-0 w-full h-full object-cover" style={{ width: `${100 / (split / 100)}%` }} />
+        <BlurredImage src={beforeUrl} alt="Before" containerClassName="absolute inset-0 w-full h-full" className="object-cover" style={{ width: `${100 / (split / 100)}%` }} />
       </div>
       {/* Divider */}
       <div
@@ -92,6 +93,8 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
   const [showInfo, setShowInfo] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [modalUrl, setModalUrl] = useState<string | null>(null);
+  const [modalTitle, setModalTitle] = useState("");
 
   const selected = result.outputs[selectedIndex];
 
@@ -122,13 +125,11 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
         {showCompare && result.modelImageUrl ? (
           <BeforeAfterSlider beforeUrl={result.modelImageUrl} afterUrl={selected.url} />
         ) : (
-          <motion.img
+          <BlurredImage
             key={selected.url}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.3 }}
             src={selected.url}
             alt="Generated output"
+            containerClassName="w-full"
             className="w-full object-contain max-h-[520px] cursor-pointer"
             onClick={() => setShowModal(true)}
           />
@@ -172,9 +173,12 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
       {showModal && (
         <ImageModal
           isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          imageUrl={selected.url}
-          title={`Generation Result - Variation ${selectedIndex + 1}`}
+          onClose={() => {
+            setShowModal(false);
+            setModalUrl(null);
+          }}
+          imageUrl={modalUrl || selected.url}
+          title={modalTitle || `Generation Result - Variation ${selectedIndex + 1}`}
         />
       )}
 
@@ -190,7 +194,7 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
                 i === selectedIndex ? "border-primary shadow-cyan" : "border-border opacity-60 hover:opacity-80"
               )}
             >
-              <img src={output.url} alt={`Variation ${i + 1}`} className="w-full h-full object-cover" />
+              <BlurredImage src={output.url} alt={`Variation ${i + 1}`} containerClassName="w-full h-full" className="object-cover" />
             </button>
           ))}
         </div>
@@ -204,12 +208,18 @@ export function ResultViewer({ result, onUpdate, onDownloadOutput }: ResultViewe
             {result.assets.map((asset) => (
               <div
                 key={asset.id}
-                className="group relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface-2"
+                className="group relative w-16 h-16 rounded-lg overflow-hidden border border-border bg-surface-2 cursor-pointer"
                 title={`${asset.role}: ${asset.id}`}
+                onClick={() => {
+                  setModalUrl(asset.url);
+                  setModalTitle(`Source Asset: ${asset.role}`);
+                  setShowModal(true);
+                }}
               >
-                <img src={asset.url} alt={asset.role} className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-background/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="text-[10px] font-bold text-white uppercase px-1 rounded bg-black/50">{asset.role}</span>
+                <BlurredImage src={asset.url} alt={asset.role} containerClassName="w-full h-full" className="object-cover" />
+                <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-1">
+                  <Eye className="w-4 h-4 text-foreground" />
+                  <span className="text-[10px] font-bold text-foreground uppercase px-1 rounded bg-surface-2/80 border border-border">{asset.role}</span>
                 </div>
               </div>
             ))}

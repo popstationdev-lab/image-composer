@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Upload, X, ImageIcon, AlertCircle, CheckCircle2, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ImageModal } from "./ImageModal";
+import { BlurredImage } from "./ui/BlurredImage";
 
 interface UploadedFile {
   id: string;
@@ -108,10 +109,11 @@ export function UploadZone({ label, required, description, value, onChange, clas
               aspectRatio: value.width && value.height ? `${value.width} / ${value.height}` : undefined
             }}
           >
-            <img
+            <BlurredImage
               src={value.preview}
               alt={label}
-              className="w-full h-full object-cover cursor-pointer"
+              containerClassName="w-full h-full"
+              className="object-cover cursor-pointer"
               onClick={() => setShowModal(true)}
             />
             <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">

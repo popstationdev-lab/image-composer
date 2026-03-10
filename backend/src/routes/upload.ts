@@ -37,6 +37,14 @@ const upload = multer({
 
 const roleSchema = z.enum(["model", "garment", "fabric", "style_ref"]);
 
+function sanitizeFilename(filename: string): string {
+    return filename
+        .replace(/\s+/g, "_") // Replace spaces with underscores
+        .replace(/[^a-z0-9\.-]/gi, "_") // Replace any non-alphanumeric (except dot and hyphen) with underscores
+        .replace(/_{2,}/g, "_") // Collapse multiple underscores
+        .replace(/^-+|-+$/g, ""); // Trim leading/trailing hyphens
+}
+
 /**
  * POST /api/upload-assets
  * Fields: modelImage, garmentImage, fabricImage?, styleRefs[]?
@@ -123,7 +131,8 @@ router.post(
                     },
                 });
 
-                const storageKey = `sessions/${sessionId}/assets/${asset.id}/${file.originalname}`;
+                const safeName = sanitizeFilename(file.originalname);
+                const storageKey = `sessions/${sessionId}/assets/${asset.id}/${safeName}`;
 
                 // Upload
                 await uploadToStorage(storageKey, file.buffer, file.mimetype);

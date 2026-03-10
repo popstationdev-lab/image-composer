@@ -153,14 +153,14 @@ async function apiFetch<T>(
  * Upload model + garment images (+ optional fabric and style refs).
  */
 export async function uploadAssets(files: {
-    modelImage: File;
-    garmentImage: File;
+    modelImage?: File | null;
+    garmentImage?: File | null;
     fabricImage?: File | null;
     styleRefs?: File[];
 }): Promise<UploadAssetsResponse> {
     const form = new FormData();
-    form.append("modelImage", files.modelImage);
-    form.append("garmentImage", files.garmentImage);
+    if (files.modelImage) form.append("modelImage", files.modelImage);
+    if (files.garmentImage) form.append("garmentImage", files.garmentImage);
     if (files.fabricImage) form.append("fabricImage", files.fabricImage);
     for (const ref of files.styleRefs ?? []) {
         form.append("styleRefs", ref);

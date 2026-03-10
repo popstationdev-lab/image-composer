@@ -262,17 +262,17 @@ export default function Index() {
     }, POLL_INTERVAL_MS);
   }, []);
 
-  const canProceedToPrompt = modelImage && !modelImage.error && garmentImage && !garmentImage.error;
+  const canProceedToPrompt = (modelImage && !modelImage.error) || (garmentImage && !garmentImage.error) || (fabricImage && !fabricImage.error) || styleRefs.length > 0;
 
   // ─── Step 1→2: Upload assets to backend ───────────────────────────────────
   const handleContinueToPrompt = async () => {
-    if (!modelImage?.file || !garmentImage?.file) return;
+    if (!canProceedToPrompt) return;
     setUploading(true);
 
     try {
       const res = await uploadAssets({
-        modelImage: modelImage.file,
-        garmentImage: garmentImage.file,
+        modelImage: modelImage?.file ?? null,
+        garmentImage: garmentImage?.file ?? null,
         fabricImage: fabricImage?.file ?? null,
         styleRefs: styleRefs.map((s) => s.file),
       });
@@ -543,14 +543,12 @@ export default function Index() {
                 <div className="grid sm:grid-cols-2 gap-4 mb-4">
                   <UploadZone
                     label="Model Image"
-                    required
                     description="Portrait or full-body photo of the model"
                     value={modelImage}
                     onChange={setModelImage}
                   />
                   <UploadZone
                     label="Garment Source"
-                    required
                     description="Hanger, flat-lay, or worn garment photo"
                     value={garmentImage}
                     onChange={setGarmentImage}

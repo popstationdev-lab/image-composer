@@ -248,3 +248,11 @@ export async function getDownloadUrl(
 ): Promise<{ url: string; expiresInSeconds: number }> {
     return apiFetch(`/download/${outputId}`);
 }
+
+/**
+ * Ping the health endpoint to keep the server alive.
+ */
+export async function ping(): Promise<void> {
+    const root = API_BASE.replace(/\/api$/, "");
+    await fetch(`${root}/health`, { credentials: "include" }).catch(() => {});
+}

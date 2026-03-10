@@ -12,9 +12,12 @@ export interface PromptParams {
   shadowEnforcement: boolean;
   shadowLevel: "soft" | "medium" | "hard";
   framing: "preserve" | "waist-legs" | "full-body";
-  resolution: "2k" | "4k" | "8k";
+  resolution: "2k" | "4k";
   variations: 1 | 2 | 3;
   quality: "fast" | "balanced" | "hd";
+  fabricWidth?: string;
+  fabricHeight?: string;
+  fabricUnit?: "cm" | "inches";
   customPrompt: string;
 }
 
@@ -52,6 +55,11 @@ function assemblePrompt(params: PromptParams): string {
 
   if (params.preserveHead) lines.push("Preserve model's original head, hair, and face exactly.");
   if (params.preserveOtherGarments) lines.push("Preserve all other garments and accessories unchanged.");
+
+  if (params.fabricWidth && params.fabricHeight) {
+    const unit = params.fabricUnit ?? "cm";
+    lines.push(`Fabric repeat size: ${params.fabricWidth}${unit} width and ${params.fabricHeight}${unit} height.`);
+  }
 
   lines.push(`Do not alter the model's pose or body proportions.`);
   lines.push(`Do not add watermarks, logos, or text overlays.`);
@@ -222,46 +230,90 @@ export function PromptBuilder({ params, onChange }: PromptBuilderProps) {
         />
 
         {/* Output controls */}
-        <div className="grid grid-cols-3 gap-3">
-          <SelectChips
-            label="Resolution"
-            options={[
-              { value: "2k", label: "2K" },
-              { value: "4k", label: "4K" },
-              { value: "8k", label: "8K" },
-            ]}
-            value={params.resolution}
-            onChange={(v) => set("resolution", v)}
-          />
-          <div className="flex flex-col gap-1.5">
-            <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Variations</span>
-            <div className="flex gap-2 flex-wrap">
-              {([1, 2, 3] as const).map((n) => (
-                <button
-                  key={n}
-                  onClick={() => set("variations", n)}
-                  className={cn(
-                    "px-3 py-1.5 rounded-lg border text-sm transition-all",
-                    params.variations === n
-                      ? "bg-primary/10 border-primary/50 text-primary font-medium"
-                      : "bg-surface-2 border-border text-muted-foreground hover:text-foreground hover:border-border/80"
-                  )}
-                >
-                  {n}
-                </button>
-              ))}
+        <div className="flex flex-col gap-5">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Fabric Repeat</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Width"
+                  value={params.fabricWidth ?? ""}
+                  onChange={(e) => set("fabricWidth", e.target.value)}
+                  className="w-full bg-surface-2 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
+                />
+                <span className="text-muted-foreground text-xs font-medium">×</span>
+                <input
+                  type="text"
+                  placeholder="Height"
+                  value={params.fabricHeight ?? ""}
+                  onChange={(e) => set("fabricHeight", e.target.value)}
+                  className="w-full bg-surface-2 border border-border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary/40 transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Unit</span>
+              <div className="flex gap-2 h-full items-end">
+                {(["cm", "inches"] as const).map((u) => (
+                  <button
+                    key={u}
+                    onClick={() => set("fabricUnit", u)}
+                    className={cn(
+                      "flex-1 px-3 py-1.5 rounded-lg border text-sm transition-all h-[34px] flex items-center justify-center",
+                      (params.fabricUnit ?? "cm") === u
+                        ? "bg-primary/10 border-primary/50 text-primary font-medium"
+                        : "bg-surface-2 border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                    )}
+                  >
+                    {u}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-          <SelectChips
-            label="Quality"
-            options={[
-              { value: "fast", label: "Fast" },
-              { value: "balanced", label: "Balanced" },
-              { value: "hd", label: "HD" },
-            ]}
-            value={params.quality}
-            onChange={(v) => set("quality", v)}
-          />
+
+          <div className="grid grid-cols-3 gap-3">
+            <SelectChips
+              label="Resolution"
+              options={[
+                { value: "2k", label: "2K" },
+                { value: "4k", label: "4K" },
+              ]}
+              value={params.resolution}
+              onChange={(v) => set("resolution", v)}
+            />
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted-foreground font-medium uppercase tracking-wider">Variations</span>
+              <div className="flex gap-2 flex-wrap">
+                {([1, 2, 3] as const).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => set("variations", n)}
+                    className={cn(
+                      "px-3 py-1.5 rounded-lg border text-sm transition-all",
+                      params.variations === n
+                        ? "bg-primary/10 border-primary/50 text-primary font-medium"
+                        : "bg-surface-2 border-border text-muted-foreground hover:text-foreground hover:border-border/80"
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <SelectChips
+              label="Quality"
+              options={[
+                { value: "fast", label: "Fast" },
+                { value: "balanced", label: "Balanced" },
+                { value: "hd", label: "HD" },
+              ]}
+              value={params.quality}
+              onChange={(v) => set("quality", v)}
+            />
+          </div>
         </div>
       </div>
 

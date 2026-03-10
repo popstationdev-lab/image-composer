@@ -33,8 +33,8 @@ export interface KieResultUrls {
 
 function resolutionMap(res: string): "1K" | "2K" | "4K" {
     if (res === "2k" || res === "2K") return "2K";
-    if (res === "8k" || res === "8K") return "4K"; // Kie max is 4K
-    return "4K"; // default to 4K (best quality)
+    if (res === "4k" || res === "4K") return "4K"; // Kie max is 4K
+    return "2K"; // default to 2K
 }
 
 /** Map frontend params to a Kie AI aspect_ratio string */
@@ -59,7 +59,7 @@ export async function kieCreateTask(
             prompt: p.prompt,
             image_input: p.imageUrls,
             aspect_ratio: p.aspectRatio ?? "2:3",
-            resolution: p.resolution ?? "4K",
+            resolution: p.resolution ?? "2K",
             output_format: p.outputFormat ?? "png",
         },
     };

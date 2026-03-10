@@ -30,9 +30,12 @@ export interface GenerationParams {
     shadowEnforcement?: boolean;
     shadowLevel?: "soft" | "medium" | "hard";
     framing?: "preserve" | "waist-legs" | "full-body";
-    resolution?: "2k" | "4k" | "8k";
+    resolution?: "2k" | "4k";
     variations?: 1 | 2 | 3;
     quality?: "fast" | "balanced" | "hd";
+    fabricWidth?: string;
+    fabricHeight?: string;
+    fabricUnit?: "cm" | "inches";
     customPrompt?: string;
 }
 
@@ -254,5 +257,5 @@ export async function getDownloadUrl(
  */
 export async function ping(): Promise<void> {
     const root = API_BASE.replace(/\/api$/, "");
-    await fetch(`${root}/health`, { credentials: "include" }).catch(() => {});
+    await fetch(`${root}/health`, { credentials: "include" }).catch(() => { });
 }

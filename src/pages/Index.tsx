@@ -33,9 +33,12 @@ const defaultParams: PromptParams = {
   shadowEnforcement: true,
   shadowLevel: "medium",
   framing: "preserve",
-  resolution: "4k",
+  resolution: "2k",
   variations: 1,
   quality: "balanced",
+  fabricWidth: "",
+  fabricHeight: "",
+  fabricUnit: "cm",
   customPrompt: "",
 };
 

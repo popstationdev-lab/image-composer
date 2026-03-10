@@ -65,12 +65,6 @@ router.post(
             const files = req.files as Record<string, Express.Multer.File[]>;
             const sessionId = req.sessionId;
 
-            // Ensure we have the required assets
-            if (!files?.modelImage?.[0] || !files?.garmentImage?.[0]) {
-                res.status(400).json({ error: "modelImage and garmentImage are required" });
-                return;
-            }
-
             // Upsert Session row
             await prisma.session.upsert({
                 where: { id: sessionId },
@@ -86,11 +80,16 @@ router.post(
                 file: Express.Multer.File;
                 role: string;
             }> = [
-                    { file: files.modelImage[0], role: "model" },
-                    { file: files.garmentImage[0], role: "garment" },
+                    ...(files.modelImage ?? []).map((f) => ({ file: f, role: "model" })),
+                    ...(files.garmentImage ?? []).map((f) => ({ file: f, role: "garment" })),
                     ...(files.fabricImage ?? []).map((f) => ({ file: f, role: "fabric" })),
                     ...(files.styleRefs ?? []).map((f) => ({ file: f, role: "style_ref" })),
                 ];
+
+            if (assetEntries.length === 0) {
+                res.status(400).json({ error: "At least one image must be uploaded" });
+                return;
+            }
 
             const createdAssets = [];
 
